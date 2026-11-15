@@ -1,0 +1,36 @@
+name: Trigger blog build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.md'
+      - '**/*.mdx'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blog-build
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HOOK: ${{ secrets.CF_PAGES_DEPLOY_HOOK }}
+    steps:
+      - name: Validate deploy hook secret
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Missing CF_PAGES_DEPLOY_HOOK secret in this repository."
+            exit 1
+          fi
+
+      - name: Trigger Cloudflare Pages
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-delay 5 \
+            -X POST "$HOOK"
