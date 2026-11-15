@@ -1,0 +1,29 @@
+name: Trigger blog build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.md'
+      - '**/*.mdx'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blog-build
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Cloudflare Pages deploy hook
+        env:
+          HOOK: ${{ secrets.CF_PAGES_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "CF_PAGES_DEPLOY_HOOK is not configured yet; skipping."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error -X POST "$HOOK"
