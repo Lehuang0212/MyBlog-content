@@ -1,7 +1,17 @@
+---
+title: "RHCSA 习题解析"
+date: "2026-08-02T16:23:38+08:00"
+tags:
+  - Linux
+  - RHEL
+  - RHCSA
+description: "按 servera 与 serverb 的练习题整理 RHCSA 配置步骤，涵盖网络、软件仓库、SELinux、用户权限、存储、容器与系统服务，并对关键命令作解释。"
+---
+
 # servera试题
 ## 1、主机名网络配置和SSH链接
 ### 题目：
-```
+```text
 配置网络，要求如下 
 1. 主机名： servera.lab.example.com 
 2. IP 地址：172.25.250.10/24 
@@ -12,8 +22,8 @@
 ```bash
 # 查看网卡和对应名
 nmcli connection show 
-# 配置ipv4地址的分配模式为manaual(手动),并且指明了地址、网关、dns
-nmcli connection modify NAME ipv4.method manaual ipv4.addresses 172.25.250.10/24 ipv4.gateway 172.25.250.254 ipv4.dns 172.25.250.220
+# 配置ipv4地址的分配模式为manual（手动）,并且指明了地址、网关、dns
+nmcli connection modify NAME ipv4.method manual ipv4.addresses 172.25.250.10/24 ipv4.gateway 172.25.250.254 ipv4.dns 172.25.250.220
 # 网络配置完成后需要重载nmcli connection reload
 nmcli connection up NAME
 # 设置主机名hostnamectl set-hostname servera.lab.example.com
@@ -44,8 +54,8 @@ AppStream:http://content.example.com/rhel9.0/x86_64/dvd/AppStream
 | **`gpgkey`**          | 条件必填     | GPG 公钥文件的路径或 URL。*仅当 `gpgcheck=1` 时必须配置*。                                          |
 ### 解答：
 ```bash
-# 仓库文件路径为etc/yum.repo.d/，此处需要新建一个仓库文件# 以rhel.repo为例，仓库文件结尾必须为.repo
-vim /etc/yum.repo.d/rhel.repo
+# 仓库文件路径为 /etc/yum.repos.d/，新建以 .repo 结尾的文件
+vim /etc/yum.repos.d/rhel.repo
 # 仓库文件格式如下，注意不要带空格，路径名字严格大小写对齐
 [BaseOS]
 name=BaseOS
@@ -72,7 +82,7 @@ gpgcheck=0
 SELinux（Security-Enhanced Linux）是一种强制访问控制（MAC）安全机制。SELinux 为系统中的每个进程和文件（包括目录、端口等）都打上了一个安全上下文（Security Context）标签。
 安全上下文的标准格式为：
 
-$$\text{user : role : type : level}$$
+`user:role:type:level`
 
 例：`system_u:object_r:httpd_sys_content_t:s0`
 
@@ -104,7 +114,7 @@ getenforce
 ## 临时切换selinux运行模式(0为Permissive宽容，1为Enforcing强制)
 setenforce
 ## 查看文件或目录的selinux上下文
-ls - Z
+ls -Z
 ## 根据策略库恢复文件正确的上下文
 restorecon
 restorecon -Rv /path # -R是递归，-v显示过程，path是路径# 临时修改文件上下文chcon
@@ -116,7 +126,7 @@ chcon -R -t httpd_sys_content_t /var/www/html/
 # 添加/修改 SELinux 允许的端口
 semanage port -a -t http_port_t -p tcp 82
 # 修复文件 SELinux 上下文
-semanage fcontext -a -t http_sys_content_t "/var/www/html(/.*)?"
+semanage fcontext -a -t httpd_sys_content_t "/var/www/html(/.*)?"
 # 刷新上下文
 restorecon -Rv /var/www/html/
 # 配置防火墙放行端口
@@ -171,7 +181,7 @@ logger “hello rhcsa” 以用户natasha 身份运行
 ### `cron` 时间语法详解
 
 `crontab` 文件中的时间共有 **5 个字段**（用空格分隔），格式如下：
-$$\text{分钟} \quad \text{小时} \quad \text{日} \quad \text{月} \quad \text{星期} \quad \text{要执行的命令}$$
+`分钟 小时 日 月 星期 要执行的命令`
 
 |**字段**|**取值范围**|**本题配置**|**含义**|
 |---|---|---|---|
@@ -260,17 +270,15 @@ ll -d /home/managers
 | **`allow`**     | `allow 192.168.1.0/24`         | （作为服务端时使用）允许特定网段的客户端向本机器同步时间。                                                          |
 ### 解答：
 ```bash
-# 修改chrony服务配置文件
-/vim /etc/chrony.conf
-# 添加配置
-pool 172.25.250.254 iburst
+# 修改 chrony 服务配置文件，并添加以下服务器配置
+vim /etc/chrony.conf
+server 172.25.250.254 iburst
 # 添加开机自启，重启服务
 systemctl enable chronyd --now
 systemctl restart chronyd
 # 测试
 chronyc sources
-# 考试时这里的^?一定为^*且主机的ip或者域名为题目中给的时间服务器
-^? bastion.lab.example.com 0 7 0 - +0ns[ +0ns] +/- 0ns
+# 检查输出中题目指定的服务器是否标为 ^*；^? 表示尚未选中或不可达
 ```
 ## 8、配置autofs
 ### 题目：
@@ -290,7 +298,7 @@ chronyc sources
 - **`/rhome`**：**基础挂载点（父目录）**。当用户进入或访问`/rhome/` 下的子目录时，`autofs` 会被触发。（注：如果本地不存在`/rhome` 目录，`autofs` 启动时会自动创建它）。- **`/etc/auto.user`**：*次要映射文件（子配置文件）* 的绝对路径（文件名可以自定义，如 `auto.user` 或`auto.misc`）。
 #### 次要映射文件 `/etc/auto.user`
 次要映射文件用于定义 **具体子目录的挂载参数和远程设备路径**。
-$$\text{触发子目录名} \quad -\text{挂载选项} \quad \text{远程 NFS 服务器与路径}$$
+`触发子目录名 -挂载选项 远程 NFS 服务器与路径`
 
 | **字段**     | **本题配置**                         | **含义与作用**                                                                                         |
 | ---------- | -------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -313,12 +321,13 @@ mkdir /rhome
 vim /etc/auto.master 
 /rhome /etc/auto.user
 ## 修改次要映射文件
+vim /etc/auto.user
 testuser -rw,sync 172.25.254.254:/rhome/testuser
 ## 设置开启自启并重启服务
 systemctl enable autofs --now
 systemctl restart autofs
 
-使用df -h命令检查172.25.254.254:/rhome/testuser 是否挂载。
+df -h /rhome/testuser
 ```
 ## 9、配置用户账户
 ### 题目：
@@ -407,7 +416,7 @@ cat /root/list
 tar czf /root/backup.tar.gz /usr/local
 ```
 ### 命令结构拆解：
-$$\text{tar} \quad \text{czf} \quad \text{[生成的压缩包绝对路径]} \quad \text{[目标目录或文件]}$$
+`tar czf [生成的压缩包绝对路径] [目标目录或文件]`
 - **`c`** (Create)：创建新的归档文件。
 - **`z`** (gzip)：调用`gzip` 机制进行压缩。
 - **`f`** (File)：指定生成的归档文件名。
@@ -417,9 +426,9 @@ $$\text{tar} \quad \text{czf} \quad \text{[生成的压缩包绝对路径]} \qua
 
 | **选项**   | **名称**      | **作用**           | **考场场景**                  |
 | -------- | ----------- | ---------------- | ------------------------- |
-| **`-c`** | `--create`  | **创建**新的归档包     | “创建归档压缩文件……”（本题：        |
-| **`-x`** | `--extract` | **解压/解包**归档文件    | “将某个 `.tar.gz` 解压到指定目录……”|
-| **`-t`** | `--list`    | **列出**归档包内部的文件列表 | 考场上不解压文件直接检查包内内容         |
+| **`-c`** | `--create`  | **创建**新的归档包      | “创建归档压缩文件……”（本题：          |
+| **`-x`** | `--extract` | **解压/解包**归档文件    | “将某个 `.tar.gz` 解压到指定目录……” |
+| **`-t`** | `--list`    | **列出**归档包内部的文件列表 | 考场上不解压文件直接检查包内内容          |
 ### 压缩格式对照表考试时题目要求的后缀名如果发生变化，只需切换对应的压缩参数：
 
 | **压缩格式**  | **文件标准后缀名**       | **tar 关键参数** | **对应算法工具** | **格式特点与记忆口诀**                                           |
@@ -471,13 +480,13 @@ podman logout registry.lab.example.com
 ```
 
 #### 模块二：镜像构建与管理（Image Management）
-|**命令**|**功能说明**|**考场易错点/ 细节说明**|
-|---|---|---|
-|**`podman build -t watcher .`**|**构建镜像**|**⚠️ 末尾的句点`.` 绝对不能漏！** 代表“以当前目录作为构建上下文”。|
-|**`podman images`**|**查看本地镜像**|验证构建结果，检查`REPOSITORY` 与`TAG`。|
-|**`podman rmi watcher`**|**删除本地镜像**|若构建镜像重名或错误，可先删除再重新构建。|
-|**`podman pull <image_name>`**|**手动拉取镜像**|测试仓库连通性时使用。|
-|**`podman search <keyword>`**|**搜索镜像**|查找私有或公共仓库中的镜像。|
+| **命令**                          | **功能说明**   | **考场易错点/ 细节说明**                          |
+| ------------------------------- | ---------- | ---------------------------------------- |
+| **`podman build -t watcher .`** | **构建镜像**   | **⚠️ 末尾的句点`.` 绝对不能漏！** 代表“以当前目录作为构建上下文”。 |
+| **`podman images`**             | **查看本地镜像** | 验证构建结果，检查`REPOSITORY` 与`TAG`。            |
+| **`podman rmi watcher`**        | **删除本地镜像** | 若构建镜像重名或错误，可先删除再重新构建。                    |
+| **`podman pull <image_name>`**  | **手动拉取镜像** | 测试仓库连通性时使用。                              |
+| **`podman search <keyword>`**   | **搜索镜像**   | 查找私有或公共仓库中的镜像。                           |
 
 #### 模块三：容器运行与管理（Container Operations）
 RHCSA 考试中除了构建镜像，还会考查**运行与开机自启容器**：
@@ -548,7 +557,7 @@ podman build -t watcher .
 | **参数**        | **全称**    | **作用与深度剖析**                                                                                          | **考场必备性** |
 | ------------- | --------- | ---------------------------------------------------------------------------------------------------- | --------- |
 | **`--files`** | `--files` | 在当前目录下直接生成 `.service` 文件（文件名格式为`container-<容器名>.service`），而不是仅打印到控制台。                                | **必带**    |
-| **`--new`**   | `--new`   | **重要机制**：服务每次启动时**重新创建**容器，服务停止时自动删除容器（`podman run` $\rightarrow$ `podman rm`）。这样可以保证容器始终基于最新镜像干净运行。 | **推荐**    |
+| **`--new`**   | `--new`   | **重要机制**：服务每次启动时**重新创建**容器，服务停止时自动删除容器（`podman run` → `podman rm`）。这样可以保证容器始终基于最新镜像干净运行。 | **推荐**    |
 | **`--name`**  | `--name`  | 指定目标容器名称（针对现有的运行容器生成配置）。                                                                             | **必带**    |
 #### `loginctl enable-linger` 机制详解
 在Linux 系统中，普通用户服务（`systemctl --user`）的生命周期与用户会话深度绑定：
@@ -560,7 +569,7 @@ podman build -t watcher .
 								销毁所有用户进程 ──> 容器挂掉！
 ```
 - **开启Linger 后**：
-```
+```bash
 loginctl enable-linger contsvc
 ```
 系统在引导启动（Boot）时，会**提前为`contsvc` 用户初始化一个独立的 Systemd 用户实例**。无需任何 SSH 登录动作，容器服务即随系统启动而启动，彻底实现真正意义上的后台 Daemon 化。
@@ -587,7 +596,8 @@ mkdir -p ~/.config/systemd/user/
 cd ~/.config/systemd/user/
 # 自动生成 systemd 服务单元文件
 podman generate systemd --files --new --name rh134
-# 重新加载用户级systemd 进程并设置开机自启systemctl --user daemon-reload
+# 重新加载用户级systemd 进程并设置开机自启
+systemctl --user daemon-reload
 systemctl --user enable --now container-rh134
 # 开启用户进程持久化保持（允许开机无人登录时自动启动：
 loginctl enable-linger
@@ -610,7 +620,8 @@ systemctl --user status container-rh134
 3. 将光标移至该行末尾`quiet`后面)，添加一个空格后输入 **`rd.break`**。
 4. 按组合键 **`Ctrl + x`** 启动系统。
 ```bash
-# 将真实的根文件系统以读写模式（rw）重新挂载mount -o remount,rw /sysroot
+# 将真实的根文件系统以读写模式（rw）重新挂载
+mount -o remount,rw /sysroot
 # 将当前Shell 的根目录环境切换到真实系统的 /sysroot 中
 chroot /sysroot
 # 非交互式重置 root 密码为redhat
@@ -665,10 +676,10 @@ yum list all
 ```bash
 # 查找逻辑卷的全称
 lsblk -p
-# 修改逻辑卷大小，以下两个命令皆可
-lvresize -rL 200M /dev/mapper/rhcsa-rhel
-lventend -rL 200M /dev/mapper/rhcsa-rhel
-# 检测df -h
+# 调整逻辑卷及文件系统大小；lvextend 不能用于缩容
+lvresize --resizefs -L 200M /dev/mapper/rhcsa-rhel
+# 检测
+df -h
 lvs /dev/mapper/rhcsa-rhel
 ```
 ## 4、创建交换分区
@@ -713,13 +724,14 @@ mkswap /dev/vdb1
 vim /etc/fstab
 # 写入内容
 UUID=70014b68-9397-4a4c-8215-15c2f6db1537 none swap defaults 0 0
-# 激活配置swapon -a
-mount -a
+# 按 /etc/fstab 激活交换分区
+swapon -a
 # 直接激活指定的 swap 设备
 swapon /dev/vdb1
 # 查看当前活跃的swap 空间列表
 swapon -s
-# 重启后再查看一次reboot 
+# 重启后再查看交换分区
+reboot
 swapon -s
 ```
 ## 5、创建逻辑卷
@@ -732,7 +744,7 @@ swapon -s
 ```
 ### Linux存储管理
 #### LVM 三层结构与常用命令全家桶
-LVM 的基本架构为：**物理卷(PV) $\rightarrow$ 卷组 (VG) $\rightarrow$ 逻辑卷(LV)**
+LVM 的基本架构为：**物理卷(PV) → 卷组 (VG) → 逻辑卷(LV)**
 
 | **架构层级**    | **查看状态命令** | **缩写/详细查看** | **常用管理命令**                                     |
 | ----------- | ---------- | ----------- | ---------------------------------------------- |
@@ -751,7 +763,7 @@ LVM 的基本架构为：**物理卷(PV) $\rightarrow$ 卷组 (VG) $\rightarrow$
 - **题目要求**：指定`datastorage` 的PE 大小为**16MiB**。
 - **正确命令**：`vgcreate -s 16M datastorage /dev/vdb2`。
 - **检查命令**：可以通过 `vgdisplay datastorage | grep "PE Size"` 验证是否正确显示为`16.00 MiB`。
-**数学计算与容量规则在创建底层分区前，需要先计算出逻辑卷的实际目标容量：**$$\text{目标容量} = \text{PE 数量} \times \text{单个 PE 大小} = 60 \times 16\text{ MiB} = 960\text{ MiB}$$
+**创建底层分区前先计算目标容量**：60 个 PE × 16 MiB = 960 MiB。
 - **划分分区大小**：在 `fdisk` 分区时，给新建分区的容量**必须大于等于 960MiB**（例如给出`+1G` 或`+1024M`），如果分区的空间小于960MiB，后续创建VG 时将无法容纳 60 个PE。
 ### 解答：
 首先通过 `lsblk -p` 查看磁盘状态，确认 `/dev/vdb` 还有剩余空间。
@@ -759,10 +771,11 @@ LVM 的基本架构为：**物理卷(PV) $\rightarrow$ 卷组 (VG) $\rightarrow$
 fdisk /dev/vdb
 ```
 在`fdisk` 交互界面中依次输入：
-- **`n`**：新建分区- **`p`**：主分区（编号选择默认的`2`）- **`First sector`**：直接回车（使用默认起始位置）- **`Last sector`**：输入`+1G`（确保容量大于960MiB）- **`t`** $\rightarrow$ **`2`**：修改2 号分区的类型
+- **`n`**：新建分区- **`p`**：主分区（编号选择默认的`2`）- **`First sector`**：直接回车（使用默认起始位置）- **`Last sector`**：输入`+1G`（确保容量大于960MiB）- **`t`** → **`2`**：修改2 号分区的类型
 - **`8e`**：指定Hex code 为`8e`（Linux LVM）- **`w`**：保存分区表并退出
 ```bash
-# 创建物理卷pvcreate /dev/vdb2
+# 创建物理卷
+pvcreate /dev/vdb2
 # 创建卷组，并使用 -s 参数显式指定 PE 大小为16M
 vgcreate -s 16M datastorage /dev/vdb2
 # 创建逻辑卷，使用小写 -l 参数按 PE 个数分配 60 个 PE
@@ -778,18 +791,12 @@ mkdir -p /mnt/data
 vim /etc/fstab
 # 内容
 UUID=fc6db72d-abe6-4f3e-9d7a-dbf0b2a97795 /mnt/data ext4 defaults 0 0
-# 必须加载一次 /etc/fstab中的挂载信息，如果有报错请进行修改mount -a
+# 必须加载一次 /etc/fstab中的挂载信息，如果有报错请进行修改
+mount -a
 
 #重启检测reboot
 df -h 
 
-#考试可能会要求格式化成fat或vfat格式 
-#可能需要先装包
-yum install dosfstools -y 
-#格式化成fat格式命令如下：
-mkfs.fat /dev/mapper/datastorage-database 
-#格式化成vfat格式命令如下：
-mkfs.vfat /dev/mapper/datastorage-database
 ```
 ## 6、配置系统调优
 ### 题目：
@@ -822,7 +829,8 @@ mkfs.vfat /dev/mapper/datastorage-database
 tuned-adm recommend
 # （假设上一步输出为：virtual-guest）# 将推荐的配置集应用为当前系统配置
 tuned-adm profile virtual-guest
-# 验证当前生效的配置集是否已正确切换tuned-adm active
+# 验证当前生效的配置集是否已正确切换
+tuned-adm active
 ```
 # 考试可能会出现的试题
 ## 1、执行程序
@@ -833,13 +841,15 @@ tuned-adm profile virtual-guest
 ```
 ### 解答：
 ```bash
-# 先查找一下有没有该命令文件，没有则自己新建which hello
+# 先查找命令文件；若题目已提供，不要覆盖
+which hello
 # 若没有就自己新建
 vim /usr/bin/hello
 # 写入内容
 #!/bin/bash
 echo "hello rhcsa"
-# 给文件添加执行权限chmod a+rx /usr/bin/hello
+# 给文件添加执行权限
+chmod a+rx /usr/bin/hello
 # 执行查看效果
 hello
 /usr/bin/hello
@@ -855,17 +865,17 @@ hello
 | **参数选项**    | **语法示例**      | **作用与深度剖析**                                                                                       |
 | ----------- | ------------- | ------------------------------------------------------------------------------------------------- |
 | **`-size`** | `-size -50k`  | **查找小于 50KB 的文件**。<br>单位说明：`k` (小写) = KiB，`M` (大写) = MiB，`G` (大写) = GiB、br>`-` 表示“小于”，`+` 表示“大于”。 |
-| **`-size`** | `-size +30k`  | **查找大于 30KB 的文件**。与上述组合后形成区间$(30\text{KB}, 50\text{KB})$。                                          |
-| **`-a`**    | `-a`          | **逻辑与(AND)**。显式连接多个条件。在 `find` 命令中，两个条件间**直接留空格默认就是AND 关系**，因此`-a` 显式写出或省略均可。                      |
+| **`-size`** | `-size +30k`  | **查找大于 30KB 的文件**。与上述组合后形成区间（30 KiB，50 KiB）。                                         |
+| **`-a`**    | `-a`          | **逻辑与(AND)**。显式连接多个条件。在 `find` 命令中，两个条件间**直接留空格默认就是AND 关系**，因此`-a` 显式写出或省略均可。                     |
 | **`-perm`** | `-perm -4000` | **查找包含 SUID 权限的文件**。<br>`4000` 是SUID 的八进制数值。前缀的`-` 表示“文件的权限位中**必须包含**此权限（可以比它多，但不能缺少该位）”。         |
 
 ### `-exec` 动作与占位符机制
-命令后半部分的`-exec cp -a {} /root/test \;` 结构分解如下：$$\text{find [路径] [条件]} \quad \mathbf{-exec} \quad \text{cp -a} \quad \mathbf{\{\}} \quad \text{/root/test} \quad \mathbf{\backslash;}$$
+命令后半部分的`-exec cp -a {} /root/test \;` 结构分解如下：`find [路径] [条件] -exec cp -a {} /root/test \;`
 - **`-exec ... \;`**：固定语法结构，表示对`find` 搜索到的每一个文件**逐一执行** `-exec` 后面指定的Shell 命令。
 - **`{}`**：*占位符*。代表`find` 每次找到的那个文件的具体路径名。
 - **`cp -a`**：`-a`（`--archive`）参数至关重要！它会在复制文件的同时**保留原始文件的权限、所有者、时间戳等元数据**。- **`\;`**：*`-exec` 的结束标记*。斜杠`\` 是为了对分号 `;` 进行转义，防止被当前 Shell 提前解释。
 ### `perm`匹配逻辑
-```
+```text
  -perm 4000  与 -perm -4000  与 -perm /4000 的区别
 ```
 
@@ -960,10 +970,12 @@ ll /root/test
 ```bash
 # 打开全局用户配置文件
 vim /etc/login.defs
-# 修改如下数值PASS_MAX_DAYS   25
+# 修改如下数值
+PASS_MAX_DAYS   25
 PASS_MIN_DAYS   0
 PASS_WARN_AGE   5
-# 添加一个测试用户useradd haha
+# 添加一个测试用户
+useradd haha
 # 查看/etc/shadow文件
 grep haha /etc/shadow
 ```
@@ -981,7 +993,8 @@ useradd user1
 echo "test" | passwd --stdin user1
 # 配置sudoers文件
 vim /etc/sudoers
-# 参考10行的配置写入user1的配置%user1    ALL=(ALL)    NOPASSWD:ALL
+# 参考10行的配置写入user1的配置
+%user1    ALL=(ALL)    NOPASSWD:ALL
 # 使用wq!保存退出
 # 切换到user1
 su - user1

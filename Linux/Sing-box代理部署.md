@@ -1,7 +1,18 @@
+---
+title: "Sing-box 代理部署"
+date: "2026-06-23T19:03:14+08:00"
+tags:
+  - Linux
+  - 网络
+  - Sing-box
+  - 代理
+description: "介绍 sing-box 的入站、路由、DNS 与出站配置，并以 VLESS、Reality 和 Cloudflare WARP 为例记录个人代理网络的安装、配置与验证过程。"
+---
+
 这是一份基于 `sing-box` 构建个人代理网络的指南，采用 `VLESS + XTLS-Reality` 实现入站流量的伪装与低性能损耗，并结合 `WireGuard` 协议打通 Cloudflare WARP 双栈隧道。
 # 一、Sing-box 基础讲解
 ## 1.定位与优势
-`sing-box` 在官方定义中是一个**通用应用层代理平台（Universal Proxy Platform）**。它的出现主要为了解决传统代理工具在协议支持与路由策略上的功能割裂问题。它由Go语言编写，`sing-box`基于 Go 语言开发，其核心优势在于**底层协议栈的完全统一与模块化**。它不仅原生集成了 Xray 的最新加密协议与 Shadowsocks、WireGuard、Trojan 等标准协议，还重写了内存管理和路由调度逻辑。这使得它既能在服务器端处理高并发的隧道封装，也能以极低的资源占用运行在客户端环境中。
+`sing-box` 在官方定义中是一个**通用应用层代理平台（Universal Proxy Platform）**。它的出现主要为了解决传统代理工具在协议支持与路由策略上的功能割裂问题。它由 Go 语言开发，其核心优势在于**底层协议栈的完全统一与模块化**。它不仅原生集成了 Xray 的最新加密协议与 Shadowsocks、WireGuard、Trojan 等标准协议，还重写了内存管理和路由调度逻辑。这使得它既能在服务器端处理高并发的隧道封装，也能以极低的资源占用运行在客户端环境中。
 [sing-box的项目地址](https://github.com/sagernet/sing-box)
 [sing-box的wiki主页](https://sing-box.sagernet.org/)
 ## 2.流量处理管道
@@ -19,8 +30,8 @@
  - **数据包生命周期过程：**
  当一个数据包（比如你要访问 `www.google.com`）进入你的 VPS 上的 `sing-box` 时，它会经历以下极其严格的加工流水线：
 **第一步：** Inbounds（入站剥离）：客户端发来一段由特定协议加密的数据流(比如**目前主流的VLESS传输协议**)，此时内核了解到了目的地址为www.google.com；目的端口为443；协议是TCP。
-**第二步**：Route（路由决策与 DNS 触发）：数据包进入 Route 模块。Route 引擎开始拿着你的 `rules`（规则链）自上而下逐条比对，如果规则仅需域名即可匹配（如 `domain_keyword`），则直接分配出站标签；如果路由遇到基于 IP 的规则（如 `geoip: cn`），则会触发 DNS 解析模块查出真实 IP，补全属性(真实IP地址)后再继续匹配，最终决定出站标签。例如：Outbounds(出站方向) = warp-ipv6-out。
-**第三步：** Outbounds（出站封装）：数据包带着标签被送到了 Outbounds 模块。以`warp-ipv6-out`这个出战通道举例，这个方向配置的协议是`WireGuard`，于是数据包按照`WireGuard`协议的标准重新加密，套上新的UDP头部，并发往Cloudflare的边缘节点。
+**第二步**：Route（路由决策与 DNS 触发）：数据包进入 Route 模块。Route 引擎开始拿着你的 `rules`（规则链）自上而下逐条比对，如果规则仅需域名即可匹配（如 `domain_keyword`），则直接分配出站标签；若使用基于目标 IP 的规则，应按当前版本的解析与规则集配置提供可匹配的 IP 信息，再决定出站标签。例如：Outbounds(出站方向) = warp-ipv6-out。
+**第三步：** Outbounds（出站封装）：数据包带着标签被送到了 Outbounds 模块。以`warp-ipv6-out`这个出站通道举例，这个方向配置的协议是`WireGuard`，于是数据包按照`WireGuard`协议的标准重新加密，套上新的UDP头部，并发往Cloudflare的边缘节点。
 ## 3.JSON 配置的声明式范式
 `sing-box` 的配置文件耦合性极低使其配置十分灵活，其原因在于它采用了**高度解耦的声明式配置范式（Declarative Configuration）**，通过采用“声明式”和严格的“**Tag（标签）寻址制**”，彻底切断了模块之间的物理绑定。
 系统中所有的入站、出站、DNS 服务器，在配置声明时都必须分配一个全局唯一的 `tag`。路由模块在编写分流规则时，绝不包含具体的物理 IP 或协议细节，仅通过 `tag` 进行逻辑映射。
@@ -58,7 +69,7 @@
 - `strategy`解析策略 prefer_ipv4表示优先ipv4，only_ipv4表示仅使用ipv4
 ### Inbounds (入站)：
 针对抗封锁，目前最主流的是 VLESS + XTLS-Reality。
-**VLESS + XTLS-Reality**：目前业界公认抗封锁能力最强的拓扑架构。**VLESS** 负责底层数据的高速搬运，而 **XTLS-Reality**则在最外层负责从**合法的白名单网站（SNI）** 动态**窃取真实的 TLS 证书指纹**，完成极其完美的**流量特征伪装**。
+**VLESS + Reality**：VLESS 处理代理连接，Reality 使用配置的握手目标、公钥和 Short ID 建立连接并提供回退行为；具体效果取决于目标站点与网络环境，不涉及窃取目标站点证书。
 ```json
 "inbounds": [
 {
@@ -94,7 +105,7 @@
 - `type` **协议声明**
 - `tag` 为该入站模块分配一个**全局唯一的标识符**
 - `listen` **绑定地址** ::表示同时监听全部 IPv4 和 IPv6 地址
-- `listen_port` **监听端口** 强制绑定 443 端口。因为本示例使用 Reality 技术伪装成标准的 HTTPS 服务器，使用 443 端口是为了严格符合 HTTPS 的 RFC 规范，消除端口维度的异常特征。
+- `listen_port` **监听端口**：本示例使用 443，这是 HTTPS 的常用端口；协议本身不要求必须使用 443。
 2. **身份鉴权配置 (Users Configuration)**
 - `users` **用户列表** 
 - `name` **用户标识**，主要用于系统日志的生成。
@@ -108,7 +119,7 @@
 - `enabled` **启用 Reality 模块**。接管传统的 TLS 握手流程。
 - `handshake` **握手转发目标**：**`"server": "www.nvidia.com"`** 与 **`"server_port": 443`**： 当遭遇主动探测机构（Active Probing）或不合法的网络扫描时，`sing-box` 内核不会断开连接，而是将该 TCP 流以极低的延迟透明代理（Transparent Proxy）至真正的 Nvidia 官网。探测者将与真正的 Nvidia 服务器完成 TLS 握手，并获得具有高度权威的真实证书。这使得该 VPS 在主动探测机制眼中，表现为一个完全合法的海外商业网站。
 - `private_key` **服务端私钥**，Reality 基于 X25519 椭圆曲线算法生成的私钥。只有持有对应公钥的合法客户端，才能在 TLS 握手过程中通过 ECDHE（椭圆曲线迪菲-赫尔曼秘钥交换）派生出正确的代理会话密钥，进入 VLESS 的代理逻辑。
-- `short_id` **简短会话标识** (Short Session ID)，一串 16 进制字符（通常为 8 位），附加在 Reality 的握手协议中。它的主要工程意义在于：当多个客户端共用同一对 Reality 公私钥时，利用不同的 `short_id` 来区分不同的客户端会话，防止重放攻击（Replay Attack）并提供更细粒度的会话管理。
+- `short_id` **短标识**：Reality 客户端与服务端需要匹配的十六进制字符串，按当前文档为 0–8 位；它不是独立的会话管理或防重放机制。
 ### Outbounds (出站)与Endpoints（端点）：
 ```json
 "outbounds": [
@@ -186,10 +197,6 @@
 			"gemini"
 		],
 		"outbound": "warp-ipv6-out"
-	},
-	{
-		"geoip": ["cn"],
-		"outbound": "direct"
 	}
 	],
 	"final": "direct"
@@ -208,7 +215,7 @@
 **L7 应用层与逻辑扩展匹配 (Application Layer & Extension)**
 - `domain_keyword` **域名子字符串模糊匹配**。要目标域名中**包含**数组中的任意字符串（例如 `"google"` 可以匹配 `www.google.com`、`api.google.co.jp` 等），即判定为命中。在处理拥有大量复杂子域名或区域后缀的大型互联网企业流量时，效率极高。
 - `domain_suffix`**域名后缀严格匹配**。基于域名的层级结构进行从右向左的严格比对。例如 `"google.com"` 将匹配 `google.com` 本身及其所有下级子域名（如 `mail.google.com`），但**绝不会匹配** `fakegoogle.com`。这是防止域名仿冒和精准放行 CDN 静态资源域名的标准手段。
-- `geoip`**IP 归属地数据库匹配**。接受一个代表国家或区域代码的字符串数组（如 `"cn"` 代表中国）。将数据包的目标 IP 送入内置的 GeoIP 数据库中查询物理归属地。这是实现跨境流量分治（如国内外流量分离）的最核心标签。
+- 旧版的 `geoip` 规则字段已移除；本示例将未命中规则的流量交给 `final: direct`，如需按地区分流，应改用当前版本支持的规则集。
 **规则执行动作标签 (Action Tags)**
 - `outbound`这是条件判断的**结果输出**。当数据包满足了该规则块内的所有匹配标签（如 `network`、`port`、`domain_keyword` 等）后，路由引擎就会向系统内核下达转发指令：将该流量强行移交至该 `outbound` 标签绑定的物理通道或虚拟隧道中去。
 # 二、Sing-box 实践示例
@@ -288,10 +295,7 @@ MTU = 1280
 ## 第三阶段：核心配置文件组装 (Configuration Assembly)
 `sing-box` 的主配置文件位于 `/etc/sing-box/config.json`。清空默认配置，写入自己的相关配置。
 ```bash
-# 清空默认配置
-sudo echo "" > /etc/sing-box/config.json
-
-# 编辑配置文件
+# 编辑配置文件，并在编辑器中替换原有内容
 sudo nano /etc/sing-box/config.json
 ```
 **标准配置文件示例：**
@@ -468,12 +472,6 @@ sudo nano /etc/sing-box/config.json
           "netflix.com"
         ],
         "outbound": "warp-ipv6-out"
-      },
-      {
-        "geoip": [
-          "cn"
-        ],
-        "outbound": "direct"
       }
     ],
     "final": "direct"

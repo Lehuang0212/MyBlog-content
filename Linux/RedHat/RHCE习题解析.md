@@ -1,9 +1,20 @@
+---
+title: "RHCE 习题解析"
+date: "2026-07-28T18:41:07+08:00"
+tags:
+  - Linux
+  - RHEL
+  - RHCE
+  - Ansible
+description: "围绕 RHCE 练习题整理 Ansible 清单、配置、Playbook、角色、存储、模板、Vault 与定时任务的解题过程，并说明常用模块与验证方法。"
+---
+
 # 1、安装并配置 Ansible
 ## 题目：
-```
+```text
 在控制节点 workstation.lab.example.com 上安装和配置 Ansible： 
 安装所需的软件包 
-创建静态清单文件 /home/devops/ansible/inventory 的，要求如下： 
+创建静态清单文件 /home/devops/ansible/inventory，要求如下：
 	servera 是 dev 主机组的成员 
 	serverb 是 test 和 balancers
 	serverc 和 serverd 是 prod 主机组的成员 
@@ -88,9 +99,9 @@ ansible-config init --disabled > /tmp/ansible.cfg
 [defaults]
 remote_user=devops
 inventory=/home/devops/ansible/inventory
-collections=/home/devops/ansible/mycollections
-roles=/home/devops/ansible/roles
-[privilege_csalation]
+collections_path=/home/devops/ansible/mycollections
+roles_path=/home/devops/ansible/roles
+[privilege_escalation]
 become=true
 become_ask_pass=false
 # 创建集合目录
@@ -102,13 +113,13 @@ tree /home/devops/ansible/
 # 登录容器
 podman login utility.lab.example.com
 # 查看主机清单是否正确
-ansible-navigator inventory -m stdout -- graph
+ansible-navigator inventory -m stdout --graph
 # 测试环境
 ansible all -m ping
 ```
 # 2、创建 yum 仓库
 ## 题目：
-```
+```text
 作为系统管理员，需在受管节点上安装软件。 
 创建 playbook /home/devops/ansible/yum_repo.yml，该 playbook 将在各个受管节点上创建以 下 yum 仓库： 
 	仓库 1： 
@@ -192,7 +203,7 @@ ansible all -m shell -a "yum repolist"
 ```
 # 3、安装 Collections
 ## 题目：
-```
+```text
 以 devops 身份
 将以下 collections 从 files/3/目录中安装到workstation.lab.example.com 
 redhat-rhel_system_roles-1.16.2.tar.gz 
@@ -215,7 +226,7 @@ community-general-4.3.0.tar.gz
 
 ### Collection 目录架构规范
 Collection 解压安装后遵循严格的目录组织规范：
-$$\text{collections\_path} \longrightarrow \mathbf{ansible\_collections/} \longrightarrow \mathbf{\langle Namespace \rangle /} \longrightarrow \mathbf{\langle Collection\_Name \rangle /}$$
+`collections_path/ansible_collections/<namespace>/<collection_name>/`
 - **Namespace (命名空间)**：标识开发者或组织（如 `redhat`、`community`、`ansible`）。
 - **Collection Name (集合名称)**：具体的功能集合（如 `rhel_system_roles`、`general`、`posix`）。
 - **Playbook 调用方式**：使用全限定集合名称（FQCN）调用模块，例如 `ansible.posix.synchronize` 或 `community.general.ini_file`。
@@ -235,18 +246,18 @@ ansible-galaxy collection list
 # 将文件拷贝到/home/devops/ansible/目录，考试时需要自己用wget命令从网站下载
 cp /home/devops/files/3/* .
 # 安装集合
-ansible-galaxy collection install ansibleposix-1.4.0.tar.gz --force
-ansible-galaxy collection install communitygeneral-4.3.0.tar.gz --force
-ansible-galaxy collection install redhatrhel_system_roles-1.16.2.tar.gz --force
+ansible-galaxy collection install ansible-posix-1.4.0.tar.gz --force -p /home/devops/ansible/mycollections
+ansible-galaxy collection install community-general-4.3.0.tar.gz --force -p /home/devops/ansible/mycollections
+ansible-galaxy collection install redhat-rhel_system_roles-1.16.2.tar.gz --force -p /home/devops/ansible/mycollections
 # 也可以使用一条命令安装三个集合
-ansible-galaxy collection install *.tar.gz --force
+ansible-galaxy collection install *.tar.gz --force -p /home/devops/ansible/mycollections
 # 验证(会生成三个目录)
 ls /home/devops/ansible/mycollections/ansible_collections/
 ansible community redhat
 ```
 # 4、安装软件包
 ## 题目：
-```
+```text
 创建名为 packages.yml 的 playbook： 
 	将 php 和 mariadb 软件包安装到 dev、 test 和 prod 组中的主机上 
 	将 RPM Development Tools 包组安装到 dev 组中的主机上 
@@ -299,7 +310,7 @@ ansible-navigator run packages.yml -m stdout
 ```
 # 5、使用角色
 ## 题目：
-```
+```text
 根据以下要求创建名为 selinux.yml 的 playbook： 
 在所有受管节点上运行，使用 selinux 角色，
 将 SELinux 策略为 targeted，
@@ -309,7 +320,7 @@ ansible-navigator run packages.yml -m stdout
 
 ### 1. 系统角色 (RHEL System Roles) 机制
 - 红帽官方预先编写并经过严格测试的各种系统管理角色（如 SELinux、Network、Timesync、Storage 等）。
-- 在 Ansible 2.9 及后续版本中，系统角色已整合到 Collection 中，其 **FQCN（全限定角色名）** 为：$$\mathbf{redhat.rhel\_system\_roles.selinux}$$
+- 在 Ansible 2.9 及后续版本中，系统角色已整合到 Collection 中，其 **FQCN（全限定角色名）** 为：`redhat.rhel_system_roles.selinux`
 ### 2. SELinux 角色核心变量对照
 `selinux` 角色提供了多个预定义的控制变量，最常考的两个如下：
 
@@ -340,7 +351,7 @@ ansible-navigator run selinux.yml -m stdout
 ```
 # 6、使用Timesync RHEL系统角色
 ## 题目：
-```
+```text
 安装 RHEL 系统角色软件包，并创建符合以下条件的playbook， /home/devops/ansible/timesync.yml： 
 1. 在所有受管节点上运行 
 2. 使用 timesync 角色 
@@ -359,10 +370,7 @@ ansible-navigator run selinux.yml -m stdout
 ```bash
 # 确保已经安装了rhel-system-roles
 dnf install -y rhel-system-roles
-# 将系统 timesync 角色拷贝到当前 ansible 工作目录下的 roles 目录中
-sudo cp -r /usr/share/ansible/roles/rhelsystem-roles.timesync/ roles/timesync
-# 修正拷贝后的目录所有权为 devops 用户
-sudo chown -R devops:devops /home/devops/ansible/roles/timesync
+# 下方 Playbook 直接使用已安装的 redhat.rhel_system_roles.timesync 集合角色
 ```
 **编辑playbook：**
 ```yml
@@ -375,7 +383,7 @@ sudo chown -R devops:devops /home/devops/ansible/roles/timesync
       - hostname: classroom.example.com
         iburst: yes
   roles:
-    - timesync
+    - redhat.rhel_system_roles.timesync
 ```
 ```bash
 # 运行playbook测试
@@ -383,7 +391,7 @@ ansible-navigator run -m stdout timesync.yml
 ```
 # 7、使用 Ansible Galaxy 安装角色
 ## 题目：
-```
+```text
 创 建 /home/devops/ansible/roles/requirements.yaml 文件用以下载并安装角色 到/home/devops/ansible/roles/ 目录中： 
 	角色名:balancer，来自于 files/6/haproxy.tar（考试写的是http://materials.example.com/t ools/haproxy.tar） 
 	角色名:phpinfo，来自于 files/6/phpinfo.tar（考试写的是http://materials.example.com/to ols/phpinfo.tar）
@@ -413,7 +421,7 @@ ansible-galaxy install -r roles/requirements.yaml -p roles/
 ```
 # 8、创建和使用角色
 ## 题目：
-```
+```text
 根据下列要求，在 /home/devops/ansible/roles 中创建名为 apache 的角色： 
 	安装 httpd 软件包，开机启动并立即运行 
 	开启防火墙并允许 web 服务通信 
@@ -427,11 +435,11 @@ ansible-galaxy install -r roles/requirements.yaml -p roles/
 cd /home/devops/ansible/roles/
 ansible-galaxy init apache
 # 编辑Jinja2 模板文件
-vim /home/devops/ansible/roles/apache/template/index.html.j2
+vim /home/devops/ansible/roles/apache/templates/index.html.j2
 # 写入
 Welcome to {{ ansible_fqdn }} on {{ ansible_default_ipv4.address }}
 # 编写角色的主任务逻辑 (tasks/main.yml)
-vim apache/apache/tasks/main.yml
+vim apache/tasks/main.yml
 ```
 **主角色逻辑：**
 ```yml
@@ -487,7 +495,7 @@ vim apache/apache/tasks/main.yml
 ```
 # 9、从 Ansible Galaxy 使用角色
 ## 题目：
-```
+```text
 创建名为 roles.yml 的 playbook，满足以下要求： 
 Playbook 运行在 balancers 主机组上，并使用 balancer 角色，这个角色为 webservers 主机组配 置负载均衡 web 服务器，配置完成后，当访问 http://serverb.lab.example.com 将显示以下输出信息： 
 	Welcome to serverc.lab.example.com on 172.25.250.12 
@@ -521,13 +529,13 @@ Playbook 运行在 balancers 主机组上，并使用 balancer 角色，这个�
 **测试：**
 ```bash
 curl http://serverb.lab.example.com
-Welcome to serverc.lab.example.com on 172.25.250.1
+Welcome to serverc.lab.example.com on 172.25.250.12
 curl http://serverb.lab.example.com
 Welcome to serverd.lab.example.com on 172.25.250.13
 ```
 # 10、创建和使用分区
 ## 题目：
-```
+```text
 根据下列要求，创建名为 partition.yml 的 playbook： 
 playbook 中包含一个 play，该 play 在 balancers 主机组中的主机上运行： 
 	在设备 vdb 上创建单个主分区，编号为 1，大小为 1500 MiB， 
@@ -540,7 +548,7 @@ playbook 中包含一个 play，该 play 在 balancers 主机组中的主机上�
 ```
 ## 思路：
 **整个 Playbook 的设计思路可以分为三个层级：**
-```
+```text
        ┌─────────────────────────────────────────────────────┐
        │ 1. 检查磁盘 vdb 是否存在                              │
        │    若不存在 -> 仅输出 "Disk does not exist"           │
@@ -649,7 +657,7 @@ ansible balancers -m shell -a 'df -h /newpart'
 ```
 # 11、创建和使用逻辑卷
 ## 题目：
-```
+```text
 创建一个名为/home/devops/ansible/lv.yml 的playbook，它将在所有受管节点上运行以执行下列任务 
 1. 创建符合以下要求的逻辑卷： 逻辑卷创建在 research 卷组中 逻辑卷名称为 data 逻辑卷大小为 600MiB 
 2. 使用 ext4 文件系统格式化逻辑卷 
@@ -709,11 +717,11 @@ ansible balancers -m shell -a 'df -h /newpart'
 # lvm.yml
 ---
 - name: lvm
-  hosts: dev,prod
+  hosts: all
   tasks:
     - name: check lvm
       ansible.builtin.debug:
-        msg: Volunme group does not exist
+        msg: Volume group does not exist
       when: "'research' not in ansible_lvm.vgs"
 
     - name: create lvm
@@ -747,7 +755,7 @@ ansible balancers -m shell -a 'df -h /newpart'
 ```
 # 12、生成主机文件
 ## 题目：
-```
+```text
 将 files/10/hosts.j2 模板文件拷贝到/home/devops/ansible 目录中，完善此模板文件，用以生成受控节点的/etc/myhosts文件 
 创建名为 hosts.yml 的 playbook 对 dev 主机组使用此模板文件，/etc/myhosts 文件内容最终如下： 
 127.0.0.1 localhost localhost.localdomain localhost4 localhost4.localdomain4 ::1 localhost localhost.localdomain localhost6 localhost6.localdomain6 172.25.250.10 servera.lab.example.com servera 
@@ -844,7 +852,7 @@ ansible dev -m shell -a 'cat /etc/myhosts'
 ```
 # 13、修改文件内容
 ## 题目：
-```
+```text
 创建名为 issue.yml 的 playbook，要求如下: 
 此 playbook 运行到所有受控节点 
 此 playbook 覆盖/etc/issue 文件中的内容： 
@@ -879,7 +887,7 @@ ansible dev -m shell -a 'cat /etc/myhosts'
 ```
 # 14、创建 Web 内容目录
 ## 题目：
-```
+```text
 按照下方所述，创建名为 webcontent.yml 的 playbook： 
 该 playbook 在 dev 主机组中的受管节点上运行 创建目录 /webdev： 
 	所有者为 webdev 组 
@@ -934,16 +942,17 @@ ansible dev -m shell -a 'cat /etc/myhosts'
 - name: webcontent
   hosts: dev
   tasks:
-    - name: create user
-      ansible.builtin.user:
+    - name: create webdev group
+      ansible.builtin.group:
         name: webdev
+        state: present
 
     - name: create webdev file
       ansible.builtin.file:
         path: /webdev
         state: directory
-        owner: webdev
-        group: root
+        owner: root
+        group: webdev
         mode: '2775'
         setype: httpd_sys_content_t
 
@@ -981,7 +990,7 @@ curl http://servera.lab.example.com/webdev/index.html
 ```
 # 15、生成硬件报告
 ## 题目：
-```
+```text
 创建名为 hwreport.yml 的 playbook，在所有受控主机上生成/root/hwreport.txt 文件，内容包含: 
 	清单主机名称 
 	以 MB 表示的总内存大小 
@@ -1041,11 +1050,11 @@ DISK_SIZE_VDB=disk_vdb_size
 # 运行playbook
 ansible-navigator run hwreport.yml -m stdout
 # 测试
-ansible all -m shell -a 'cat /root/hwreport'
+ansible all -m shell -a 'cat /root/hwreport.txt'
 ```
 # 16、创建 password vault
 ## 题目：
-```
+```text
 创建一个名为 locker.yml 的 ansible vault 文件存储用户密码： 
 Vault 文件中含有两个变量，名称如下： 
 	pw_developer: Imadev 
@@ -1072,7 +1081,7 @@ ansible-vault view locker.yml  # 明文
 ```
 # 17、创建用户帐户
 ## 题目：
-```
+```text
 需要创建的用户账户清单来自于 files/15/user_list.yml，请拷贝到/home/devops/ansible/中，配合上一题的 locker.yml，创建名为 users.yml 的 playbook，要求如下： 
 	用户的 job description 为 developer 的用户，创建到 dev 和 test 主机组中，用户密码来自于 pw_developer 变量，用户的附属组是 devops 
 	用户的 job description 为 manager 的用户，创建到 prod 主机组中，用户密码来自于 pw_manager 变量，用户的附属组是opsmgr 
@@ -1132,7 +1141,7 @@ cp /home/devops/files/15/user_list.yml .
 **验证：**
 ```bash
 # 运行playbook
-ansible-navigator run user.yml -m stdout
+ansible-navigator run users.yml -m stdout
 # 查看各个主机的用户信息
 ansible all -m shell -a "id bob"
 ansible all -m shell -a "id sally"
@@ -1140,7 +1149,7 @@ ansible all -m shell -a "id fred"
 ```
 # 18、更新 Ansible 库的密钥
 ## 题目：
-```
+```text
 请为 expense.yml 文件修改 vault 密码，要求如下： 
 	请将 files/16/expense.yml 文件保存到 /home/devops/ansible/expense.yml 
 	当前密码为 ibmibm 
@@ -1157,7 +1166,7 @@ ansible-vault rekey expense.yml --ask-vault-pass
 ```
 # 19、配置 cron 作业
 ## 题目：
-```
+```text
 在所有受管节点上创建名为 /home/devops/ansible/cron.yml 的 Playbook，为 natasha 用户创建 cron 作业： 
 	用户 natasha 每隔 2 分钟执行 logger “RH294 in progress”
 ```
@@ -1188,5 +1197,5 @@ ansible-vault rekey expense.yml --ask-vault-pass
 # 运行playbook
 ansible-navigator run cron.yml -m stdout
 # 测试
-ansible all -m shell -a "crontab -u natasha - l"
+ansible all -m shell -a "crontab -u natasha -l"
 ```

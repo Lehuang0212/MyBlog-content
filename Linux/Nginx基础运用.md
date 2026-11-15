@@ -1,12 +1,13 @@
 ---
-title: Nginx的使用
-date: 2026-04-08 20:01:25
+title: "Nginx 基础运用"
+date: "2026-04-08T20:01:25+08:00"
 tags:
+  - Linux
+  - Nginx
+description: "记录在 Linux 服务器上安装 Nginx、创建站点配置、启用虚拟主机、检查配置和部署 HTTPS 的基本步骤，附常用命令及配置示例。"
 ---
 
-<!-- more -->
-
-## 1.**安装Nginx**
+# 1. 安装 Nginx
 ```bash
 # 安装
 sudo apt update && sudo apt install nginx -y
@@ -14,10 +15,8 @@ sudo apt update && sudo apt install nginx -y
 which nginx
 # 应该会输出类似/usr/sbin/nginx的内容
 ```
-## 2.创建站点配置文件
+# 2.创建站点配置文件
 ```bash
-sudo vim /etc/nginx/sites-available/example.com
-# 示例(也可以使用vi或者nano)
 sudo vim /etc/nginx/sites-available/example.com
 ```
 **配置文件的内容示例:**
@@ -63,7 +62,7 @@ server {
     }
 }
 ```
-## 3.启用站点配置
+# 3.启用站点配置
 ```bash
 # 在.../sites-enabled/目录下创建同名链接文件example.com指向.../sites-available/example.com
 sudo ln -s /etc/nginx/sites-available/example.com /etc/nginx/sites-enabled/
@@ -76,7 +75,7 @@ sudo ln -s /etc/nginx/sites-available/example.com /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 # 避免冲突：默认站点通常监听 80 端口，且 server_name 为 _（捕获所有未匹配的域名），如果不删除，它会与你的 example.com 竞争处理请求，可能导致你的域名访问失败或出现默认欢迎页。
 ```
-## 4.测试配置语法
+# 4.测试配置语法
 ```bash
 # 测试 Nginx 配置文件的语法是否正确。它不会启动或重载 Nginx，只做静态检查。
 sudo nginx -t
@@ -88,7 +87,7 @@ sudo nginx -t
 2.解析所有 include 的文件，构建完整的配置树。
 3.检查语法错误（如缺少分号、大括号不匹配、指令拼写错误）和语义错误（如 listen 端口冲突、引用的文件或目录不存在）。
 4.输出测试结果。
-## 5.重载 Nginx 服务
+# 5.重载 Nginx 服务
 ```bash
 # 平滑重载 Nginx 服务，在不中断现有连接的情况下应用新的配置。
 sudo systemctl reload nginx
@@ -97,7 +96,7 @@ sudo systemctl reload nginx
 # 查看状态
 systemctl status nginx
 ```
-## 6.配置HTTPS(SSL证书) --可选
+# 6.配置HTTPS(SSL证书) --可选
 Certbot 客户端 是 Let's Encrypt 证书颁发机构（CA）的官方自动化工具，用于申请、续期、撤销 SSL/TLS 证书，并能自动配置 Web 服务器（如 Nginx、Apache）以启用 HTTPS。
 ```bash
 # 安装Certbot 客户端
@@ -107,12 +106,13 @@ sudo apt install certbot python3-certbot-nginx -y
 sudo certbot --nginx -d example.com -d www.example.com
 ```
 执行后，证书及相关文件保存在：
-```
-/etc/letsencrypt/live/lehuang.xyz/
+```text
+/etc/letsencrypt/live/example.com/
 ├── cert.pem         # 服务器证书
 ├── chain.pem        # 中间证书链
 ├── fullchain.pem    # cert.pem + chain.pem（Nginx 通常使用这个）
 ├── privkey.pem      # 私钥（权限 600，仅 root 可读）
 
-Nginx 配置中引用的是 fullchain.pem 和 privkey.pem。
 ```
+
+Nginx 配置中引用的是 `fullchain.pem` 和 `privkey.pem`。
